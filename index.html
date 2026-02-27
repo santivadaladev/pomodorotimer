@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POMODORO</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --red: #e63946;
+    --orange: #f4a261;
+    --cream: #f1faee;
+    --dark: #1a1a2e;
+    --darker: #0f0f1a;
+    --gray: #2a2a3e;
+    --tick: #e63946;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--darker);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 20px;
+  }
+
+  .label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    letter-spacing: 8px;
+    color: var(--red);
+    margin-bottom: 8px;
+    opacity: 0.8;
+  }
+
+  .machine {
+    background: var(--gray);
+    border: 2px solid #3a3a50;
+    border-radius: 4px;
+    padding: 40px 60px;
+    position: relative;
+    box-shadow:
+      0 0 0 1px #1a1a2e,
+      0 20px 60px rgba(0,0,0,0.8),
+      inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  /* Corner screws */
+  .machine::before, .machine::after {
+    content: '✦';
+    position: absolute;
+    font-size: 8px;
+    color: #444;
+  }
+  .machine::before { top: 10px; left: 12px; }
+  .machine::after { top: 10px; right: 12px; }
+
+  .title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 52px;
+    letter-spacing: 12px;
+    color: var(--cream);
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .mode-tabs {
+    display: flex;
+    gap: 2px;
+    justify-content: center;
+    margin-bottom: 36px;
+  }
+
+  .mode-btn {
+    background: none;
+    border: 1px solid #3a3a50;
+    color: #666;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+  .mode-btn.active {
+    background: var(--red);
+    border-color: var(--red);
+    color: white;
+  }
+  .mode-btn:hover:not(.active) { border-color: var(--red); color: var(--red); }
+
+  /* Ring timer */
+  .ring-wrap {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    margin: 0 auto 36px;
+  }
+
+  svg.ring {
+    width: 220px;
+    height: 220px;
+    transform: rotate(-90deg);
+  }
+
+  .ring-bg {
+    fill: none;
+    stroke: #1a1a2e;
+    stroke-width: 6;
+  }
+
+  .ring-progress {
+    fill: none;
+    stroke: var(--red);
+    stroke-width: 6;
+    stroke-linecap: butt;
+    stroke-dasharray: 628;
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 1s linear, stroke 0.3s;
+  }
+
+  .ring-tick-marks {
+    position: absolute;
+    inset: 0;
+  }
+
+  .time-display {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .time-text {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 72px;
+    color: var(--cream);
+    letter-spacing: 4px;
+    line-height: 1;
+    text-shadow: 0 0 30px rgba(230, 57, 70, 0.3);
+  }
+
+  .session-count {
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: #555;
+    margin-top: 4px;
+  }
+
+  /* Pulse animation when running */
+  @keyframes pulse-glow {
+    0%, 100% { text-shadow: 0 0 20px rgba(230,57,70,0.2); }
+    50% { text-shadow: 0 0 40px rgba(230,57,70,0.6); }
+  }
+  .running .time-text { animation: pulse-glow 2s ease-in-out infinite; }
+  .running .ring-progress { stroke: var(--red); }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 28px;
+  }
+
+  .btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    border: 1px solid;
+    padding: 12px 28px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-primary {
+    background: var(--red);
+    border-color: var(--red);
+    color: white;
+  }
+  .btn-primary:hover {
+    background: #c1121f;
+    border-color: #c1121f;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(230,57,70,0.4);
+  }
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-secondary {
+    background: none;
+    border-color: #3a3a50;
+    color: #666;
+  }
+  .btn-secondary:hover { border-color: #666; color: var(--cream); }
+
+  .stats-bar {
+    display: flex;
+    gap: 30px;
+    justify-content: center;
+    padding-top: 20px;
+    border-top: 1px solid #2a2a3e;
+  }
+
+  .stat {
+    text-align: center;
+  }
+
+  .stat-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    color: var(--red);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: #444;
+    text-transform: uppercase;
+  }
+
+  /* Pomodoro dots */
+  .tomato-dots {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #2a2a3e;
+    border: 1px solid #3a3a50;
+    transition: all 0.3s;
+  }
+  .dot.done { background: var(--red); border-color: var(--red); box-shadow: 0 0 8px rgba(230,57,70,0.5); }
+  .dot.current { border-color: var(--red); animation: blink 1s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* Flash on complete */
+  @keyframes flash {
+    0%,100%{opacity:1} 50%{opacity:0}
+  }
+  .flash { animation: flash 0.3s 3; }
+
+  .bottom-screws {
+    position: absolute;
+    bottom: 10px;
+    left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 12px;
+    font-size: 8px;
+    color: #444;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="label">▸ FOCUS MACHINE</div>
+  <div class="machine" id="machine">
+    <div class="title">POMODORO</div>
+
+    <div class="mode-tabs">
+      <button class="mode-btn active" data-mode="work" onclick="setMode('work')">Lavoro</button>
+      <button class="mode-btn" data-mode="short" onclick="setMode('short')">Pausa breve</button>
+      <button class="mode-btn" data-mode="long" onclick="setMode('long')">Pausa lunga</button>
+    </div>
+
+    <div class="tomato-dots" id="dots"></div>
+
+    <div class="ring-wrap" id="ringWrap">
+      <svg class="ring" viewBox="0 0 220 220">
+        <circle class="ring-bg" cx="110" cy="110" r="100"/>
+        <circle class="ring-progress" id="ringProgress" cx="110" cy="110" r="100"/>
+      </svg>
+      <div class="time-display">
+        <div class="time-text" id="timeDisplay">25:00</div>
+        <div class="session-count" id="sessionLabel">SESSIONE 1</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-primary" id="startBtn" onclick="toggleTimer()">AVVIA</button>
+      <button class="btn btn-secondary" onclick="resetTimer()">RESET</button>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat">
+        <div class="stat-num" id="completedStat">0</div>
+        <div class="stat-label">Completati</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="focusTimeStat">0</div>
+        <div class="stat-label">Min. focus</div>
+      </div>
+    </div>
+
+    <div class="bottom-screws">
+      <span>✦</span><span>✦</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  const MODES = {
+    work:  { label: 'Lavoro',      duration: 25 * 60, color: '#e63946' },
+    short: { label: 'Pausa breve', duration:  5 * 60, color: '#f4a261' },
+    long:  { label: 'Pausa lunga', duration: 15 * 60, color: '#457b9d' },
+  };
+
+  let currentMode = 'work';
+  let totalSeconds = MODES.work.duration;
+  let remaining = totalSeconds;
+  let running = false;
+  let interval = null;
+  let completed = 0;
+  let focusMinutes = 0;
+  let sessionInCycle = 0; // 0-3 (4 pomodori per ciclo)
+
+  const timeDisplay = document.getElementById('timeDisplay');
+  const startBtn = document.getElementById('startBtn');
+  const ringProgress = document.getElementById('ringProgress');
+  const machine = document.getElementById('machine');
+  const sessionLabel = document.getElementById('sessionLabel');
+  const completedStat = document.getElementById('completedStat');
+  const focusTimeStat = document.getElementById('focusTimeStat');
+
+  const CIRCUMFERENCE = 2 * Math.PI * 100; // ~628
+
+  function buildDots() {
+    const dots = document.getElementById('dots');
+    dots.innerHTML = '';
+    for (let i = 0; i < 4; i++) {
+      const d = document.createElement('div');
+      d.className = 'dot' + (i < sessionInCycle ? ' done' : '') + (i === sessionInCycle && currentMode === 'work' ? ' current' : '');
+      dots.appendChild(d);
+    }
+  }
+
+  function formatTime(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  }
+
+  function updateRing() {
+    const ratio = remaining / totalSeconds;
+    const offset = CIRCUMFERENCE * (1 - ratio);
+    ringProgress.style.strokeDashoffset = offset;
+  }
+
+  function setMode(mode) {
+    if (running) return;
+    currentMode = mode;
+    totalSeconds = MODES[mode].duration;
+    remaining = totalSeconds;
+    ringProgress.style.stroke = MODES[mode].color;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    updateDisplay();
+    updateRing();
+    buildDots();
+  }
+
+  function updateDisplay() {
+    timeDisplay.textContent = formatTime(remaining);
+    sessionLabel.textContent = currentMode === 'work'
+      ? `SESSIONE ${sessionInCycle + 1} DI 4`
+      : MODES[currentMode].label.toUpperCase();
+    completedStat.textContent = completed;
+    focusTimeStat.textContent = focusMinutes;
+  }
+
+  function toggleTimer() {
+    if (running) {
+      clearInterval(interval);
+      running = false;
+      machine.classList.remove('running');
+      startBtn.textContent = 'RIPRENDI';
+    } else {
+      running = true;
+      machine.classList.add('running');
+      startBtn.textContent = 'PAUSA';
+      interval = setInterval(tick, 1000);
+    }
+  }
+
+  function tick() {
+    remaining--;
+    if (currentMode === 'work') focusMinutes = Math.floor((MODES.work.duration - remaining + completed * MODES.work.duration) / 60);
+    updateDisplay();
+    updateRing();
+
+    if (remaining <= 0) {
+      clearInterval(interval);
+      running = false;
+      machine.classList.remove('running');
+      startBtn.textContent = 'AVVIA';
+      onComplete();
+    }
+  }
+
+  function onComplete() {
+    timeDisplay.classList.add('flash');
+    setTimeout(() => timeDisplay.classList.remove('flash'), 1000);
+
+    if (currentMode === 'work') {
+      completed++;
+      sessionInCycle = (sessionInCycle + 1) % 4;
+      focusMinutes = completed * 25;
+      completedStat.textContent = completed;
+      focusTimeStat.textContent = focusMinutes;
+
+      // Suggest break
+      if (sessionInCycle === 0) {
+        setTimeout(() => setMode('long'), 800);
+      } else {
+        setTimeout(() => setMode('short'), 800);
+      }
+    } else {
+      setTimeout(() => setMode('work'), 800);
+    }
+  }
+
+  function resetTimer() {
+    clearInterval(interval);
+    running = false;
+    machine.classList.remove('running');
+    remaining = totalSeconds;
+    startBtn.textContent = 'AVVIA';
+    updateDisplay();
+    updateRing();
+  }
+
+  // Init
+  ringProgress.style.strokeDasharray = CIRCUMFERENCE;
+  ringProgress.style.strokeDashoffset = 0;
+  buildDots();
+  updateDisplay();
+</script>
+</body>
+</html>
